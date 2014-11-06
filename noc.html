@@ -1,0 +1,360 @@
+<html>
+<head>
+<title>NOC</title>
+<meta http-equiv="content-type" content="text/html; charset=utf-8">
+<script src="http://ajax.googleapis.com/ajax/libs/jquery/1.8.2/jquery.min.js"></script>
+<script src="http://code.highcharts.com/highcharts.js"></script>
+<script>
+
+(function($) {
+    $.QueryString = (function(a) {
+        if (a == "") return {};
+        var b = {};
+        for (var i = 0; i < a.length; ++i)
+        {
+            var p=a[i].split('=');
+            if (p.length != 2) continue;
+            b[p[0]] = decodeURIComponent(p[1].replace(/\+/g, " "));
+        }
+        return b;
+    })(window.location.search.substr(1).split('&'))
+})(jQuery);
+
+$(function () {
+    $(document).ready(function () {
+        Highcharts.setOptions({
+            global: {
+                useUTC: $.QueryString["utc"] == "1"
+            }
+        });
+
+        var chart = null;
+        var rps_series = null;
+        var rps_last_time = 0;
+        var err_series = null;
+        var err_last_time = 0;
+        var lat_series = null;
+        var lat_last_time = 0;
+        var charts_loaded = 0;
+        var init_state = true;
+        var latency_max_scale = $.QueryString["latency_scale"] || 3000;
+        var rainbow_scale = latency_max_scale / 7000;
+
+        var elb_name = "parse-api";  // merely the default. replace with your default
+        var qp_elb_name = $.QueryString["elb"];
+        if (qp_elb_name != undefined) {
+            elb_name = qp_elb_name;
+            console.log("elb set, using " + elb_name);
+        }
+        document.title = "NOC " + elb_name;
+
+        var is_flair = !($.QueryString["flair"] == "0");
+        var show_rainbow = false;
+        var unicorn_percentage = 0;
+        if (is_flair) {
+            show_rainbow = true;
+            if ($.QueryString["unicorn_pct"] == undefined) {
+                unicorn_percentage = 0.1;
+            } else {
+                unicorn_percentage = parseFloat($.QueryString["unicorn_pct"]);
+            }
+        }
+
+        var is_errors_scale_seconds = $.QueryString["error_scale_seconds"] == "1";
+
+        function update_graph() {
+            console.log("update_graph()");
+            var cache_buster = (new Date()).getTime();
+            var redraw = !init_state;  // don't redraw in init state
+
+            if (init_state && show_rainbow) {
+                var rainbow_a = "0.1";
+                // chart.yAxis[1] is the latency axis
+                chart.yAxis[1].addPlotBand({
+                    color: 'rgba(255,0,0,' + rainbow_a + ')',
+                    from: 6000 * rainbow_scale,
+                    to: Number.MAX_VALUE,
+                    id: "plot-band-red",
+                });
+                chart.yAxis[1].addPlotBand({
+                    color: 'rgba(255,127,0,' + rainbow_a + ')',
+                    from: 5000 * rainbow_scale,
+                    to: 6000 * rainbow_scale,
+                    id: "plot-band-orange",
+                });
+                chart.yAxis[1].addPlotBand({
+                    color: 'rgba(255,255,0,' + rainbow_a + ')',
+                    from: 4000 * rainbow_scale,
+                    to: 5000 * rainbow_scale,
+                    id: "plot-band-yellow",
+                });
+                chart.yAxis[1].addPlotBand({
+                    color: 'rgba(0,255,0,' + rainbow_a + ')',
+                    from: 3000 * rainbow_scale,
+                    to: 4000 * rainbow_scale,
+                    id: "plot-band-green",
+                });
+                chart.yAxis[1].addPlotBand({
+                    color: 'rgba(0,0,255,' + rainbow_a + ')',
+                    from: 2000 * rainbow_scale,
+                    to: 3000 * rainbow_scale,
+                    id: "plot-band-blue",
+                });
+                chart.yAxis[1].addPlotBand({
+                    color: 'rgba(75,0,130,' + rainbow_a + ')',
+                    from: 1000 * rainbow_scale,
+                    to: 2000 * rainbow_scale,
+                    id: "plot-band-indigo",
+                });
+                chart.yAxis[1].addPlotBand({
+                    color: 'rgba(143,0,255,' + rainbow_a + ')',
+                    from: 0 * rainbow_scale,
+                    to: 1000 * rainbow_scale,
+                    id: "plot-band-purple",
+                });
+            }
+
+            $.get(elb_name + "-RequestCount.csv?" + cache_buster, function( data ) {
+                lines = data.split("\n");
+                now = (new Date).getTime();
+                for (i = 0; i < lines.length; i++) {
+                    if (lines[i].length == 0) continue;
+                    fields = lines[i].split(",");
+                    var t = 1000 * parseFloat(fields[0]);
+                    var v = parseFloat(fields[1]) / 60.0;  // per sec
+                    var shift = rps_series.data.length > 60;
+
+                    // reload the page if we've missed a few
+                    // data points due to suspended computer or
+                    if (rps_last_time != 0 && t - rps_last_time > 5 * 60 * 1000) {
+                        location.reload();
+                    }
+
+                    if (Math.random() < unicorn_percentage) {
+                        // replace these with your flair
+                        var icons = [
+                            'url(unicorn-icon.gif)',
+                            'url(kitty-icon1.gif)',
+                            'url(star-blinking.gif)',
+                        ];
+                        var point = {
+                            x: t,
+                            y: v,
+                            marker: {
+                                symbol: icons[Math.floor(Math.random() * icons.length)]
+                            }
+                        };
+                    } else {
+                        var point = [t, v];
+                    }
+                    if (t > rps_last_time || !shift) {
+                        rps_series.addPoint(point, redraw, shift);
+                        console.log("new point RequestCount " + new Date(t) + " " + ((now - t) / 1000) + " seconds behind");
+                        if (t > rps_last_time) rps_last_time = t;
+                    } else {
+                        break;
+                    }
+                }
+                if (init_state && ++charts_loaded >= 3) {
+                    init_state = false;
+                    chart.redraw();
+                    console.log("chart.redraw()");
+                }
+            });
+            $.get(elb_name + "-HTTPCode_Backend_5XX.csv?" + cache_buster, function( data ) {
+                lines = data.split("\n");
+                now = (new Date).getTime();
+                var points = [];
+                for (i = 0; i < lines.length; i++) {
+                    if (lines[i].length == 0) continue;
+                    fields = lines[i].split(",");
+                    var t = 1000 * parseFloat(fields[0]);
+                    var v = parseFloat(fields[1]) / (is_errors_scale_seconds ? 60: 1);  // per min
+                    points.unshift([t, v]);  // points must be in order
+                }
+                err_series.setData(points);
+
+                if (init_state && ++charts_loaded >= 3) {
+                    init_state = false;
+                    chart.redraw();
+                    console.log("chart.redraw()");
+                }
+            });
+            $.get(elb_name + "-Latency.csv?" + cache_buster, function( data ) {
+                lines = data.split("\n");
+                now = (new Date).getTime();
+                for (i = 0; i < lines.length; i++) {
+                    if (lines[i].length == 0) continue;
+                    fields = lines[i].split(",");
+                    var t = 1000 * parseFloat(fields[0]);
+                    var v = parseFloat(fields[4]) * 1000;  // avg ms
+                    var shift = lat_series.data.length > 60;
+                    if (v > 1000) {
+                        var point = {
+                            x: t,
+                            y: v,
+                            color: 'rgba(200,0,0,1)',
+                            marker: {
+                                symbol: 'url(fire-icon-small.png)'
+                            }
+                        };
+                    } else if (v > 300) {
+                        var point = {
+                            x: t,
+                            y: v,
+                            color: 'rgba(200,0,0,1)',
+                            marker: {
+                                symbol: 'url(snow.png)'
+                            }
+                        };
+                    } else {
+                        var point = [t, v];
+                    }
+
+                    if (t > lat_last_time || !shift) {
+                        lat_series.addPoint(point, redraw, shift);
+                        console.log("new point Latency " + new Date(t) + " " + ((now - t) / 1000) + " seconds behind");
+                        if (t > lat_last_time) lat_last_time = t;
+                    } else {
+                        break;
+                    }
+                }
+                if (init_state && ++charts_loaded >= 3) {
+                    init_state = false;
+                    chart.redraw();
+                    console.log("chart.redraw()");
+                }
+            });
+        }
+
+        $('#container').highcharts({
+            chart: {
+                // animation: Highcharts.svg, // don't animate in old IE
+                animation: false,
+                alignTicks: false,  // align ticks on y axis multiple axis
+                events: {
+                    load: function () {
+                        chart = this;
+                        rps_series = this.series[0];
+                        err_series = this.series[1];
+                        lat_series = this.series[2];
+
+                        update_graph();
+
+                        // set up the updating of the chart each second
+                        setInterval(function () {
+                            update_graph();
+                        }, 2000);
+                    }
+                }
+            },
+            title: {
+                text: elb_name
+            },
+            xAxis: {
+                type: 'datetime',
+                tickPixelInterval: 120,
+                dateTimeLabelFormats : $.QueryString["utc"] == "1" ? {} : {
+                    hour: '%I %p',
+                    minute: '%I:%M %p'
+                }
+            },
+            yAxis: [{ // Primary yAxis
+                min: 0,
+                title: {
+                    text: 'count',
+                },
+                labels: {
+                    format: '{value}',
+                },
+                gridLineWidth: 0,  // uncomment if dotted lines are too busy
+                // gridLineDashStyle: "Dot",  // only used if gridLineWidth > 0
+                // gridLineColor: '#0000ff',  // only used if gridLineWidth > 0
+            }, { // Secondary yAxis
+                min: 0,
+                max: latency_max_scale,
+                title: {
+                    text: 'ms',
+                },
+                labels: {
+                    format: '{value}',
+                },
+                opposite: true,
+                tickInterval: 200,
+            }],
+
+            tooltip: {
+                crosshairs: [true],
+                shared: true
+            },
+            legend: {
+                layout: 'vertical',
+                align: 'left',
+                verticalAlign: 'middle',
+                x: 120,
+                y: 0,
+                floating: true,
+            },
+            exporting: {
+                enabled: false
+            },
+            series: [
+                {
+                    // animation: false,
+                    name: 'requests',
+                    type: 'spline',
+                    tooltip: {
+                        valueDecimals: 0,
+                        valueSuffix: ' per second'
+                    },
+                    lineWidth: 3,
+                    data: [],
+                },
+                {
+                    // animation: false,
+                    name: '5xx',
+                    type: 'column',
+                    tooltip: {
+                        valueDecimals: 0,
+                        valueSuffix: ' per ' + (is_errors_scale_seconds ? "second": "minute")
+                    },
+                    data: [],
+                    dataLabels: {
+                        enabled: true,  // show text
+                        rotation: -90,
+                        align: 'bottom',
+                        x: 4,
+                        y: -5,
+                        color: '#999900',
+                        style: {
+                            textShadow: '0 0 3px yellow',
+                        },
+                        format: '{y:,.0f}',
+                    },
+                    color: 'rgba(200,0,0,1)',
+                },
+                {
+                    // animation: false,
+                    name: 'latency',
+                    type: 'spline',
+                    yAxis: 1,
+                    lineWidth: 5,
+                    tooltip: {
+                        valueDecimals: 0,
+                        valueSuffix: ' ms'
+                    },
+                    data: [],
+                    color: 'rgba(200,0,200,1)',
+                },
+            ]
+        });
+    });
+
+});
+</script>
+
+</head>
+<body>
+<div id="container" style="width:100%; height:100%;"></div>
+</body>
+</html>

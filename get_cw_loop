@@ -1,0 +1,6 @@
+#!/bin/bash
+
+while true; do
+  timeout 30 get_cw.py "$@"
+  sleep 5
+done
