@@ -36,7 +36,11 @@ class Metrics
   def format(data)
     data.sort_by{ |d| d["Timestamp"] }.inject("") do |m, e| 
       unit = e['Unit'].downcase.sub("count", "cnt").sub("seconds", "s")
-      m << "#{e['Timestamp'].to_i},#{e['Sum']},#{e['Minimum']},#{e['Maximum']},#{e['Average']},#{unit}\n"
+      sum = "%f" % e['Sum']
+      minimum = "%f" % e['Minimum']
+      maximum = "%f" % e['Maximum']
+      average = "%f" % e['Average']
+      m << "#{e['Timestamp'].to_i},#{sum},#{minimum},#{maximum},#{average},#{unit}\n"
       m
     end
   end
