@@ -40,7 +40,7 @@ $(function () {
         var latency_max_scale = $.QueryString["latency_scale"] || 3000;
         var rainbow_scale = latency_max_scale / 7000;
 
-        var elb_name = "parse-api";  // merely the default. replace with your default
+        var elb_name = "elb000150";  // merely the default. replace with your default
         var qp_elb_name = $.QueryString["elb"];
         if (qp_elb_name != undefined) {
             elb_name = qp_elb_name;
@@ -114,7 +114,7 @@ $(function () {
                 });
             }
 
-            $.get(elb_name + "-RequestCount.csv?" + cache_buster, function( data ) {
+            $.get(elb_name + "/RequestCount.csv?" + cache_buster, function( data ) {
                 lines = data.split("\n");
                 now = (new Date).getTime();
                 for (i = 0; i < lines.length; i++) {
@@ -161,7 +161,7 @@ $(function () {
                     console.log("chart.redraw()");
                 }
             });
-            $.get(elb_name + "-HTTPCode_Backend_5XX.csv?" + cache_buster, function( data ) {
+            $.get(elb_name + "/HTTPCode_Backend_5XX.csv?" + cache_buster, function( data ) {
                 lines = data.split("\n");
                 now = (new Date).getTime();
                 var points = [];
@@ -180,7 +180,7 @@ $(function () {
                     console.log("chart.redraw()");
                 }
             });
-            $.get(elb_name + "-Latency.csv?" + cache_buster, function( data ) {
+            $.get(elb_name + "/Latency.csv?" + cache_buster, function( data ) {
                 lines = data.split("\n");
                 now = (new Date).getTime();
                 for (i = 0; i < lines.length; i++) {

@@ -1,1 +1,1 @@
-web: gunicorn gettingstarted.wsgi --log-file -
+web: bundle exec puma -p $PORT -I ./ config.ru
