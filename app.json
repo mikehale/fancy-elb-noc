@@ -1,0 +1,7 @@
+{
+  "name": "fancy elb noc",
+  "env": {
+      "AWS_ACCESS_KEY_ID": "required",
+      "AWS_SECRET_ACCESS_KEY": "required"
+  }
+}
