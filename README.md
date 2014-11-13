@@ -44,6 +44,7 @@ extra flair setup
 todo
 -----------
 * add caching (maybe in postgres)
+* show fractional latency on the graph
 * cleanup readme
 * refactor metrics class
 * better logging
